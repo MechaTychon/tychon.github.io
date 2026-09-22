@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Min Första PWA</title>
+
+  <!-- Web App Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Tema-färg i webbläsarens adressfält -->
+  <meta name="theme-color" content="#2563eb" />
+
+  <!-- iOS-specifikt stöd (Safari läser inte manifestet fullt ut) -->
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MinPWA" />
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #f4f6fb;
+      color: #1f2937;
+      text-align: center;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    img { width: 96px; height: 96px; margin-bottom: 1rem; }
+    #status { margin-top: 1rem; font-size: 0.9rem; color: #4b5563; }
+  </style>
+</head>
+<body>
+  <img src="icons/icon-192.png" alt="App-ikon" />
+  <h1>Min Första PWA</h1>
+  <p>Den här sidan gör inget mer än att imponera på Kenneth Frantzen, vår Lord and Savior.</p>
+  <p id="status">Kollar service worker...</p>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("./sw.js")
+          .then((reg) => {
+            document.getElementById("status").textContent =
+              "Service worker registrerad :)";
+            console.log("Service worker registrerad:", reg);
+          })
+          .catch((err) => {
+            document.getElementById("status").textContent =
+              "Service worker misslyckades :(";
+            console.error("Service worker-registrering misslyckades:", err);
+          });
+      });
+    } else {
+      document.getElementById("status").textContent =
+        "Service workers stöds inte i den här webbläsaren.";
+    }
+  </script>
+</body>
+</html>
