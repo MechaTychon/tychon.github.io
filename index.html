@@ -17,23 +17,73 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="MinPWA" />
 
+  <!-- face-api.js: känner igen ansikten och tolkar ansiktsuttryck i webbläsaren -->
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+
   <style>
+    :root {
+      --bg: #f4f6fb;
+      --accent: #2563eb;
+      transition: background-color 0.6s ease;
+    }
     body {
       font-family: system-ui, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      min-height: 100vh;
       margin: 0;
-      background: #f4f6fb;
+      background: var(--bg);
       color: #1f2937;
       text-align: center;
-      padding: 1rem;
+      padding: 1.5rem;
       box-sizing: border-box;
+      transition: background-color 0.6s ease;
     }
-    img { width: 96px; height: 96px; margin-bottom: 1rem; }
-    #status { margin-top: 1rem; font-size: 0.9rem; color: #4b5563; }
+    img { width: 80px; height: 80px; margin-bottom: 0.5rem; }
+    #status { margin-top: 0.5rem; font-size: 0.85rem; color: #4b5563; }
+
+    #emotion-panel { margin-top: 2rem; }
+    #emoji-display {
+      width: 160px;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 16px;
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    }
+    #emotion-label {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-top: 0.5rem;
+      text-transform: capitalize;
+    }
+    #cam-wrap {
+      position: relative;
+      width: 240px;
+      height: 180px;
+      margin: 1.5rem auto 0.5rem;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      display: none;
+    }
+    #cam-wrap.active { display: block; }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    #cam-status { font-size: 0.8rem; color: #6b7280; margin-top: 0.4rem; min-height: 1.1em; }
   </style>
 </head>
 <body>
@@ -42,19 +92,33 @@
   <p>Den här sidan gör inget mer än att imponera på Kenneth Frantzen, vår Lord and Savior.</p>
   <p id="status">Kollar service worker...</p>
 
+  <section id="emotion-panel">
+    <h2>Känsloläsare (kamera)</h2>
+    <button id="start-cam-btn">Starta kameran</button>
+    <p id="cam-status"></p>
+
+    <div id="cam-wrap">
+      <video id="video" autoplay muted playsinline></video>
+    </div>
+
+    <img id="emoji-display" src="images/neutral.png" alt="Känsloreaktion" />
+    <div id="emotion-label">väntar...</div>
+  </section>
+
   <script>
+    // --- Service worker-registrering ---
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("./sw.js")
           .then((reg) => {
             document.getElementById("status").textContent =
-              "Service worker registrerad :)";
+              "Service worker registrerad";
             console.log("Service worker registrerad:", reg);
           })
           .catch((err) => {
             document.getElementById("status").textContent =
-              "Service worker misslyckades :(";
+              "Service worker misslyckades";
             console.error("Service worker-registrering misslyckades:", err);
           });
       });
@@ -62,6 +126,100 @@
       document.getElementById("status").textContent =
         "Service workers stöds inte i den här webbläsaren.";
     }
+
+    // --- Kamera + känsloigenkänning ---
+    const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
+
+    // Varje känsla kopplas till en bild och en bakgrundsfärg på sidan.
+    // Byt gärna ut src-sökvägarna mot egna bilder i images/-mappen —
+    // behåll bara samma filnamn, eller ändra sökvägen här.
+    const EMOTION_STYLE = {
+      neutral:   { image: "images/neutral.png",   color: "#f4f6fb", label: "neutral" },
+      happy:     { image: "images/happy.png",     color: "#fef3c7", label: "glad" },
+      sad:       { image: "images/sad.png",       color: "#dbeafe", label: "ledsen" },
+      angry:     { image: "images/angry.png",     color: "#fecaca", label: "arg" },
+      fearful:   { image: "images/fearful.png",   color: "#e9d5ff", label: "rädd" },
+      disgusted: { image: "images/disgusted.png", color: "#d9f99d", label: "äcklad" },
+      surprised: { image: "images/surprised.png", color: "#fed7aa", label: "överraskad" },
+    };
+
+    const video = document.getElementById("video");
+    const camWrap = document.getElementById("cam-wrap");
+    const camStatus = document.getElementById("cam-status");
+    const startBtn = document.getElementById("start-cam-btn");
+    const emojiEl = document.getElementById("emoji-display");
+    const labelEl = document.getElementById("emotion-label");
+
+    let detectInterval = null;
+
+    async function loadModels() {
+      camStatus.textContent = "Laddar AI-modeller...";
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+      ]);
+    }
+
+    async function startCamera() {
+      startBtn.disabled = true;
+      try {
+        await loadModels();
+
+        camStatus.textContent = "Ber om tillgång till kameran...";
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+          audio: false,
+        });
+        video.srcObject = stream;
+        camWrap.classList.add("active");
+        camStatus.textContent = "Kameran är igång — visa ett ansikte!";
+
+        detectInterval = setInterval(detectEmotion, 600);
+      } catch (err) {
+        console.error("Kunde inte starta kameran:", err);
+        camStatus.textContent =
+          "Kunde inte komma åt kameran (nekad behörighet eller inget stöd).";
+        startBtn.disabled = false;
+      }
+    }
+
+    async function detectEmotion() {
+      if (video.readyState < 2) return;
+
+      const result = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions();
+
+      if (!result) {
+        labelEl.textContent = "inget ansikte hittat";
+        return;
+      }
+
+      // Hitta känslan med högst sannolikhet
+      const [topEmotion] = Object.entries(result.expressions).sort(
+        (a, b) => b[1] - a[1]
+      )[0];
+
+      applyEmotion(topEmotion);
+    }
+
+    let currentEmotion = null;
+
+    function applyEmotion(emotion) {
+      if (emotion === currentEmotion) return; // byt bara bild vid faktisk ändring
+      currentEmotion = emotion;
+
+      const style = EMOTION_STYLE[emotion] || EMOTION_STYLE.neutral;
+      emojiEl.src = style.image;
+      labelEl.textContent = style.label;
+      document.body.style.backgroundColor = style.color;
+
+      // Liten "puls"-animation varje gång bilden byts
+      emojiEl.style.transform = "scale(1.15)";
+      setTimeout(() => (emojiEl.style.transform = "scale(1)"), 250);
+    }
+
+    startBtn.addEventListener("click", startCamera);
   </script>
 </body>
 </html>
