@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Min Första PWA</title>
+  <title>My first PWA</title>
 
   <!-- Web App Manifest -->
   <link rel="manifest" href="manifest.json" />
@@ -88,13 +88,13 @@
 </head>
 <body>
   <img src="icons/icon-192.png" alt="App-ikon" />
-  <h1>Min Första PWA</h1>
-  <p>Den här sidan gör inget mer än att imponera på Kenneth Frantzen, vår Lord and Savior.</p>
-  <p id="status">Kollar service worker...</p>
+  <h1>Test for PWA</h1>
+  <p></p>
+  <p id="status">Checking service worker...</p>
 
   <section id="emotion-panel">
-    <h2>Känsloläsare (kamera)</h2>
-    <button id="start-cam-btn">Starta kameran</button>
+    <h2>Emotion reader (Camera)</h2>
+    <button id="start-cam-btn">Start camera</button>
     <p id="cam-status"></p>
 
     <div id="cam-wrap">
@@ -124,7 +124,7 @@
       });
     } else {
       document.getElementById("status").textContent =
-        "Service workers stöds inte i den här webbläsaren.";
+        "Service workers not supported in this browser.";
     }
 
     // --- Kamera + känsloigenkänning ---
@@ -165,20 +165,20 @@
       try {
         await loadModels();
 
-        camStatus.textContent = "Ber om tillgång till kameran...";
+        camStatus.textContent = "Asking permission for camera";
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user" },
           audio: false,
         });
         video.srcObject = stream;
         camWrap.classList.add("active");
-        camStatus.textContent = "Kameran är igång — visa ett ansikte!";
+        camStatus.textContent = "Camera is enabled, show your face!";
 
         detectInterval = setInterval(detectEmotion, 600);
       } catch (err) {
         console.error("Kunde inte starta kameran:", err);
         camStatus.textContent =
-          "Kunde inte komma åt kameran (nekad behörighet eller inget stöd).";
+          "Couldn't access your camera.";
         startBtn.disabled = false;
       }
     }
@@ -191,7 +191,7 @@
         .withFaceExpressions();
 
       if (!result) {
-        labelEl.textContent = "inget ansikte hittat";
+        labelEl.textContent = "No face found";
         return;
       }
 
